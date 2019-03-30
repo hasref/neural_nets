@@ -71,7 +71,7 @@ class KNearestNeighbor(object):
         # training point, and store the result in dists[i, j]. You should   #
         # not use a loop over dimension.                                    #
         #####################################################################
-        pass
+        dists[i,j] = np.linalg.norm( X[i, :] - self.X_train[j, :] )
         #####################################################################
         #                       END OF YOUR CODE                            #
         #####################################################################
@@ -93,7 +93,8 @@ class KNearestNeighbor(object):
       # Compute the l2 distance between the ith test point and all training #
       # points, and store the result in dists[i, :].                        #
       #######################################################################
-      pass
+      difference = self.X_train - X[i, :] 
+      dists[i,:] = np.linalg.norm(difference, axis= (1) )
       #######################################################################
       #                         END OF YOUR CODE                            #
       #######################################################################
@@ -121,7 +122,31 @@ class KNearestNeighbor(object):
     # HINT: Try to formulate the l2 distance using matrix multiplication    #
     #       and two broadcast sums.                                         #
     #########################################################################
-    pass
+    
+    # The following decomposition relies on the observation that for one 
+    # training image and testing image, the l2 distance is:
+    #       here sum_i means sum over i
+    #
+    #       sum_i (train_i - test_i)**2 = sum_i (train_i **2 + test_i**2
+    #                                      - 2 * train_i * test_i)))
+    #        = sum_i (train_i**2) + sum_i(test_i**2) - sum_i(2*test_i*train_i))
+    #
+    #  sum_i (train_i**2) + sum_i(test_i**2)  ==> quad_term
+    #  sum_i(2*test_i*train_i))              === linear term
+    
+    # has shape (no of testing samples, no of training samples)
+    linear_term = -2 * np.dot (X, np.transpose( self.X_train ) )
+    
+    # reshape since we want a matrix with first row as sum of the first test
+    # example sum(test**2) with all such sums for the training set and so on
+    quad_term_1 = np.sum ( X ** 2, axis = 1 ).reshape(num_test,1) 
+    
+    quad_term_2 = np.sum ( self.X_train**2 , axis = 1 ).reshape(1,num_train)
+    
+    #sum --> broadcasting prodcues right result
+    quad_term = quad_term_1 + quad_term_2 
+    dists = np.sqrt (linear_term + quad_term)
+    
     #########################################################################
     #                         END OF YOUR CODE                              #
     #########################################################################
@@ -153,7 +178,8 @@ class KNearestNeighbor(object):
       # neighbors. Store these labels in closest_y.                           #
       # Hint: Look up the function numpy.argsort.                             #
       #########################################################################
-      pass
+      index_of_k_closest_images = np.argsort( (dists[i,:]) )[:k]
+      closest_y = self.y_train[ index_of_k_closest_images ]
       #########################################################################
       # TODO:                                                                 #
       # Now that you have found the labels of the k nearest neighbors, you    #
@@ -161,7 +187,9 @@ class KNearestNeighbor(object):
       # Store this label in y_pred[i]. Break ties by choosing the smaller     #
       # label.                                                                #
       #########################################################################
-      pass
+      #we can also use Counter from collections
+      label, label_count = np.unique (closest_y, return_counts = True)
+      y_pred[i] = label[np.argmax(label_count)]
       #########################################################################
       #                           END OF YOUR CODE                            # 
       #########################################################################
