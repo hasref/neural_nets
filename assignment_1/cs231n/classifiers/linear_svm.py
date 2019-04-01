@@ -28,13 +28,25 @@ def svm_loss_naive(W, X, y, reg):
   for i in range(num_train):
     scores = X[i].dot(W)
     correct_class_score = scores[y[i]]
+    #count number of rows of W for which w_j . x_i - w_yi . x_i + delta > 0
+    # i.e. rows that contribute to loss
+    num_rows_contrib_loss = 0    
     for j in range(num_classes):
       if j == y[i]:
         continue
       margin = scores[j] - correct_class_score + 1 # note delta = 1
       if margin > 0:
+        num_rows_contrib_loss += 1  
+        # contributes to loss = contributes to gradient  
+        dW[:,j] += X[i]
         loss += margin
+    
+    #fix the correct score column in dW
+    dW[:,  y[i] ] += -num_rows_contrib_loss * X[i]
 
+  # Divide by N
+  dW /= num_train
+  dW += 2 * reg * W  
   # Right now the loss is a sum over all training examples, but we want it
   # to be an average instead so we divide by num_train.
   loss /= num_train
@@ -69,7 +81,24 @@ def svm_loss_vectorized(W, X, y, reg):
   # Implement a vectorized version of the structured SVM loss, storing the    #
   # result in loss.                                                           #
   #############################################################################
-  pass
+  scores = np.dot(X,W)
+  # get correct scores for each training point
+  correct_scores = scores[np.arange(X.shape[0]), y ].reshape(-1, 1)
+  #subtract correct score from scores for each training point
+  scores = scores - correct_scores + 1
+  #subtract the ones we just added to the correct score positions
+  scores[np.arange(X.shape[0]), y ] -= 1
+  
+  #take max (0, ---)
+  scores [ scores < 0 ] = 0
+
+  # compute loss
+  loss = np.sum(scores)
+  loss /= X.shape[0]
+  
+  # add regularization
+  loss += reg * np.sum(W * W)
+
   #############################################################################
   #                             END OF YOUR CODE                              #
   #############################################################################
@@ -84,7 +113,22 @@ def svm_loss_vectorized(W, X, y, reg):
   # to reuse some of the intermediate values that you used to compute the     #
   # loss.                                                                     #
   #############################################################################
-  pass
+  # multipliers for true score column in derivative
+  # here scores behaves like a weight matrix: each row gives the weights for
+  #X_row in dW
+  non_zeros_each_row = np.sum ( scores > 0 , axis = 1 )
+  scores[ scores > 0 ] = 1 # making it weights
+  scores[ np.arange(X.shape[0]), y ] = -1 * non_zeros_each_row
+  
+  # the i-th row of scores now contains the recipe for using the i-th row of X
+  # to partially construct dW
+  # Now remember: [X_col1 X_col2 *[A_row1
+  #                                 A_row2]  = X_col1 * A_row1 + X_col2 *A_row2
+  # This is exactly what we want except with X transposed. 
+  dW = np.dot(X.transpose(), scores)
+  dW /= X.shape[0]
+  dW += 2 * reg * W
+  
   #############################################################################
   #                             END OF YOUR CODE                              #
   #############################################################################
