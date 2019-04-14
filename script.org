@@ -357,3 +357,40 @@ Also has universal representational power. We can use multiple indicator functio
 the input $x_i$ to approximate some function as well. ( Think of the Dirac Delta function )
 
  
+
+* CS231n Assignment 1 - Question 4 - Two Layer Network
+
+Below, we can see the some of gradient derivations for assignment 1, question 4 from CS231n. Here
+we have a two layer network with the graph:
+
+#+CAPTION:Computational Graph for Assignment 1, Question 4
+#+ATTR_ORG: :width 600px
+#+NAME: fig:computational_graph
+[[./images/assignment1_question4_graph.jpg]]
+
+A summary of the required gradients can be found in this image: 
+
+
+#+CAPTION: Summary of gradients
+#+ATTR_ORG: :width 600px
+#+NAME: fig:gradient-summary
+[[./images/summary.jpg]]
+
+
+
+#+CAPTION: Derivations of some of the gradients
+#+ATTR_ORG: :width 600px
+#+NAME: fig:derivations-b1
+[[./images/deriv_b_1.jpg
+]]
+
+#+CAPTION: Derivations of some of the gradients
+#+ATTR_ORG: :width 600px
+#+NAME: fig:derivations-b2
+[[./images/deriv_b_2.jpg]]
+
+
+#+CAPTION: Derivations of some of the gradients
+#+ATTR_ORG: :width 600px
+#+NAME: fig:derivations-y
+[[./images/deriv_Y.jpg]]
