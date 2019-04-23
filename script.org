@@ -3,7 +3,12 @@
 
 This script follows the introduction to deep learning lecture at TUM and also uses a great 
 deal of material from Stanford's CS231n class along with other various sources that 
-will be linked. 
+will be linked.
+
++ Reading List for CS231n, found on reddit:
+[[https://docs.google.com/document/d/1kBqzF4LRB80ppo1kOIGNTD_JtkhmWsK1J0iyv1fTFGU/pub][Link to Google Drive]] 
+
+
 
 * Image Classification
 
