@@ -66,8 +66,8 @@ def sgd_momentum(w, dw, config=None):
     # the next_w variable. You should also use and update the velocity v.     #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
+    v = config["momentum"] * v - config["learning_rate"] * dw
+    next_w = w + v
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -104,8 +104,11 @@ def rmsprop(w, dw, config=None):
     # config['cache'].                                                        #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
+    decay_rate = config["decay_rate"]
+    cache = config["cache"]
+    config["cache"] = decay_rate * cache + (1 - decay_rate) *  (dw ** 2)
+    next_w = w - config["learning_rate"] * dw / ( np.sqrt (config["cache"]) +
+                       config["epsilon"] )
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -148,8 +151,26 @@ def adam(w, dw, config=None):
     # using it in any calculations.                                           #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
+    beta_1 = config["beta1"]
+    beta_2 = config["beta2"]
+    alpha = config["learning_rate"]
+    first_moment = config["m"]
+    second_moment = config["v"]
+    t = config["t"] +  1
+    
+    first_moment = beta_1 * first_moment + (1 - beta_1 ) * dw
+    second_moment = beta_2 * second_moment + (1 - beta_2 ) * dw ** 2
+    
+    config["m"] = first_moment
+    config["v"] = second_moment
+    
+    #unbiased first and second moment
+    first_moment = first_moment / ( 1 - beta_1 ** t )
+    second_moment = second_moment / ( 1 - beta_2 ** t)
+    config["t"] = t
+    
+    next_w = w - alpha * first_moment / (np.sqrt( second_moment ) +
+                               config["epsilon"]) 
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
