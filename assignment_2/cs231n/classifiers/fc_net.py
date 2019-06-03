@@ -287,6 +287,9 @@ class FullyConnectedNet(object):
 
         out = X
         cache = {}
+        if self.use_dropout:
+            dropout_cache = {}
+            
         for i in range( self.num_layers - 1):
             num = str(i+1)
             W = self.params["W"+num]
@@ -296,22 +299,25 @@ class FullyConnectedNet(object):
                 gamma = self.params["gamma"+num]
                 beta = self.params["beta" + num]
                 out,cached_res = affine_batch_relu_forward(out, W, b, gamma, beta,
-                                                           self.bn_params[i])
-                cache[num] = cached_res
+                                                           self.bn_params[i])                   
+                
                 
             elif (self.normalization == 'layernorm'):
                 gamma = self.params["gamma"+num]
                 beta = self.params["beta" + num]
                 out,cached_res = affine_layer_relu_forward(out, W, b, gamma, beta,
                                                            self.bn_params[i])
-                cache[num] = cached_res
 
                 
             else:
-                
                 out, cached_res = affine_relu_forward(out, W, b)
-                cache [ num ] = cached_res
-            
+                
+            cache[num] = cached_res
+            # add dropout after relu
+            if self.use_dropout:
+                out, drop_cached_res = dropout_forward(out, self.dropout_param)
+                dropout_cache[num] = drop_cached_res
+                
         #last layer
         num = str(self.num_layers)
         scores, cached_last = affine_forward(out, self.params["W" + num], 
@@ -352,6 +358,11 @@ class FullyConnectedNet(object):
         
         for i in range(self.num_layers - 1, 0, -1):
             num = str(i)
+            
+            #backprop through dropout layer
+            if self.use_dropout:
+                dx = dropout_backward(dx, dropout_cache[num])
+            
             if self.normalization == 'batchnorm':
                 dx, dw, db, dgamma, dbeta = affine_batch_relu_backward(dx, cache[num])
                 grads["gamma" + num] = dgamma
