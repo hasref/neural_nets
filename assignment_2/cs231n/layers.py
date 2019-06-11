@@ -573,8 +573,40 @@ def conv_forward_naive(x, w, b, conv_param):
     # Hint: you can use the function np.pad for padding.                      #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    
+    N,C,H,W = np.shape(x)
+    F,_,HH, WW = np.shape(w)
+    
+    pad_num = conv_param['pad']
+    stride = conv_param['stride']
+    
+    # define output size - integer division since we need to pass this to np.zeros
+    H_bar = 1 + (H + 2 * pad_num - HH)  // stride
+    W_bar = 1 + (W + 2 * pad_num - WW ) // stride
+    
+    x_padded = np.pad(x, ((0,0), (0,0), (pad_num,pad_num), (pad_num,pad_num)), 
+                      mode='constant',
+                      constant_values=0)
+    
+    out = np.zeros( (N, F, H_bar, W_bar ) )
+    
+    # naiv-est(?) possbile loop
+    for image in range(N):
+        for f in range(F):
+            for height in range(H_bar):
+                
+                h_start = height * stride
+                h_end = height * stride + HH
+                
+                for width in range(W_bar):
+                    w_start = width * stride
+                    w_end = width * stride + WW
+                    
+                    out[image,f,height,width] = np.sum (
+                            x_padded[image, :, h_start:h_end, w_start:w_end] * \
+                            w[f, :, :, : ] ) + b[f]
+                    
 
-    pass
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -602,8 +634,76 @@ def conv_backward_naive(dout, cache):
     # TODO: Implement the convolutional backward pass.                        #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
+    
+    x,w,b,conv_param = cache
+    
+    N,C,H,W = np.shape(x)
+    F,_,HH, WW = np.shape(w)
+    _, _, H_bar, W_bar = np.shape(dout)
+    
+    pad_num = conv_param['pad']
+    stride = conv_param['stride']
+    
+    # db is just a sum
+    db = np.sum(dout, axis=(0,2,3))
+    
+    # dw - naiver than naive
+    x_padded = np.pad(x, ((0,0), (0,0), (pad_num,pad_num), (pad_num,pad_num)), 
+                  mode='constant',
+                  constant_values=0)
+    
+    dw = np.zeros( np.shape(w) )
+    
+    for f in range(F):
+        
+        for image in range(N):
+            
+            # 2d dout
+            dout_part = dout[image,f,:,:]
+            
+            for height in range(HH):
+                
+                h_start = height * stride
+                h_end = height * stride + H_bar
+                
+                for width in range(WW):
+                    w_start = width * stride
+                    w_end = width * stride + W_bar
+                    
+                    for c in range(C):
+                        dw[f,c, height, width] += np.sum (
+                                x_padded[image,c, h_start:h_end, w_start:w_end ] * \
+                        dout_part)
+    
+    #dx full convolution
+    dout_padded = np.pad( dout, 
+                     ((0,0), (0,0), (pad_num,pad_num), (pad_num,pad_num)),
+                     mode='constant',
+                     constant_values=0 )
+    
+    dx = np.zeros( np.shape(x) )
+    
+    for image in range(N):
+        for f in range(F):
+            
+            for c in range(C):
+                
+                dw_rev = np.flip( w[f,c,:,:] )
+                
+                for height in range(H):
+                    h_start = height
+                    h_end = height + HH
+                    
+                    for width in range(W):
+                        w_start = width
+                        w_end = width + WW
+                        
+                        dx[image, c, height, width ] += np.sum ( 
+                               dout_padded[image, f, h_start:h_end, w_start:w_end] * \
+                               dw_rev )
+                        
+                
+        
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
