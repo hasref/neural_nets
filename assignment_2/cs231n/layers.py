@@ -576,7 +576,7 @@ def conv_forward_naive(x, w, b, conv_param):
     
     N,C,H,W = np.shape(x)
     F,_,HH, WW = np.shape(w)
-    
+
     pad_num = conv_param['pad']
     stride = conv_param['stride']
     
@@ -634,6 +634,7 @@ def conv_backward_naive(dout, cache):
     # TODO: Implement the convolutional backward pass.                        #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    from scipy import signal 
     
     x,w,b,conv_param = cache
     
@@ -644,6 +645,9 @@ def conv_backward_naive(dout, cache):
     pad_num = conv_param['pad']
     stride = conv_param['stride']
     
+    H_bar = 1 + (H + 2 * pad_num - HH)  // stride
+    W_bar = 1 + (W + 2 * pad_num - WW ) // stride
+    
     # db is just a sum
     db = np.sum(dout, axis=(0,2,3))
     
@@ -653,31 +657,46 @@ def conv_backward_naive(dout, cache):
                   constant_values=0)
     
     dw = np.zeros( np.shape(w) )
+    dx_padded = np.zeros( np.shape(x_padded) )
     
     for f in range(F):
         
         for image in range(N):
             
             # 2d dout
-            dout_part = dout[image,f,:,:]
+            #dout_part = dout[image,f,:,:]
             
-            for height in range(HH):
+            for height in range(H_bar):
                 
                 h_start = height * stride
-                h_end = height * stride + H_bar
+                h_end = height * stride + HH
                 
-                for width in range(WW):
+                for width in range(W_bar):
                     w_start = width * stride
-                    w_end = width * stride + W_bar
+                    w_end = width * stride + WW
                     
-                    for c in range(C):
-                        dw[f,c, height, width] += np.sum (
-                                x_padded[image,c, h_start:h_end, w_start:w_end ] * \
-                        dout_part)
+                    dw[f] += x_padded[image, :, h_start:h_end, w_start:w_end] *\
+                    dout[image, f, height, width]
+                    
+                    dx_padded[image, :, h_start:h_end, w_start:w_end] += w[f] * \
+                    dout[image, f, height, width]
+
+    dx = dx_padded[:, :, pad_num:pad_num+H, pad_num:pad_num+W]
+                    
     
+    """
+    for c in range(C):
+        dw[f,c, height, width] += np.sum (
+                x_padded[image,c, h_start:h_end, w_start:w_end ] * \
+        dout_part)
+        
+        dx[]
+    """    
+
     #dx full convolution
+    """
     dout_padded = np.pad( dout, 
-                     ((0,0), (0,0), (pad_num,pad_num), (pad_num,pad_num)),
+                     ((0,0), (0,0), (HH-1,HH-1), (WW-1,WW-1)),
                      mode='constant',
                      constant_values=0 )
     
@@ -698,12 +717,13 @@ def conv_backward_naive(dout, cache):
                         w_start = width
                         w_end = width + WW
                         
+                        
                         dx[image, c, height, width ] += np.sum ( 
                                dout_padded[image, f, h_start:h_end, w_start:w_end] * \
                                dw_rev )
                         
-                
-        
+    """           
+
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -737,7 +757,30 @@ def max_pool_forward_naive(x, pool_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N,C,H,W = np.shape(x)
+    
+    pool_width = pool_param['pool_width']
+    pool_height = pool_param['pool_height']
+    stride  = pool_param['stride']
+    
+    H_bar = 1 + (H - pool_height) // stride
+    W_bar = 1 + (W - pool_width) // stride
+    
+    out = np.zeros ( ( N, C, H_bar, W_bar ) )
+    
+    for image in range(N):
+        for height in range(H_bar):
+            h_start = height * stride
+            h_end = height * stride + pool_height
+            
+            for width in range(W_bar):
+                
+                w_start = width * stride
+                w_end = width * stride + pool_width
+                
+                out[image, :, height, width] = np.max( 
+                        x[image, :, h_start:h_end, w_start:w_end], axis=(1,2) )
+    
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -763,8 +806,40 @@ def max_pool_backward_naive(dout, cache):
     # TODO: Implement the max-pooling backward pass                           #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    
+    x,pool_param = cache
+    
+    N, C, H, W = np.shape(x)
+    _, _, H_bar, W_bar = np.shape(dout)
 
-    pass
+    pool_width = pool_param['pool_width']
+    pool_height = pool_param['pool_height']
+    stride  = pool_param['stride']
+    
+    dx = np.zeros(np.shape(x))
+    for image in range(N):
+        for height in range(H_bar):
+            
+            h_start = height * stride
+            h_end = height * stride + pool_height
+            
+            for width in range(W_bar):
+                w_start = width * stride
+                w_end = width * stride + pool_width
+                
+                x_sub = x[image, :, h_start:h_end, w_start:w_end]
+                x_max = np.max (x_sub, axis =(1,2))
+                
+                # expand dims to enable broadcasting
+                x_max = x_max[:, np.newaxis, np.newaxis]
+                mask = (x_sub == x_max)
+                
+                out = dout[image, :, height, width]
+                #prepare for broadcasting
+                out = out[:, np.newaxis, np.newaxis]
+                
+                dx[image, :, h_start:h_end, w_start:w_end] = \
+                 out * mask
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
