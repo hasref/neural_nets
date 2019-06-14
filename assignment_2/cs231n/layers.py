@@ -879,10 +879,16 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
     # vanilla version of batch normalization you implemented above.           #
     # Your implementation should be very short; ours is less than five lines. #
     ###########################################################################
-    # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
-
+    # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****    
+    
+    # compute mean and variance across examples and spatial dimensions
+    # for each feature map
+    N, C, H, W = np.shape(x)
+    x_batch = np.transpose(x, ( 0, 2, 3, 1) )
+    x_batch = x_batch.reshape(-1, C )
+    out, cache = batchnorm_forward(x_batch, gamma, beta, bn_param )
+    out = ( out.reshape( N, H, W , C) ).transpose(0,3,1,2)
+    
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
     #                             END OF YOUR CODE                            #
@@ -914,9 +920,11 @@ def spatial_batchnorm_backward(dout, cache):
     # Your implementation should be very short; ours is less than five lines. #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
-
+    N,C,H,W = dout.shape
+    dout = ( dout.transpose(0,2,3,1) ).reshape( -1 , C)
+    dx, dgamma, dbeta = batchnorm_backward( dout, cache )
+    dx = ( dx.reshape( N, H, W, C ) ).transpose(0,3,1,2)
+    
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
     #                             END OF YOUR CODE                            #
@@ -954,8 +962,21 @@ def spatial_groupnorm_forward(x, gamma, beta, G, gn_param):
     # and layer normalization!                                                # 
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
+    N, C , H , W = np.shape(x)
+    
+    # from group norm paper
+    x_group = x.reshape(N, G, C // G, H, W)
+    mean = np.mean(x_group, axis=(2,3,4), keepdims=True)
+    variance = np.var (x_group, axis=(2,3,4), keepdims=True)
+    
+    x_group = ( x_group - mean ) / ( np.sqrt ( variance + eps ) ) 
+    
+    x_group = np.reshape (x_group, (N, C, H, W) )
+    
+    out = gamma.reshape( 1, -1, 1, 1) * x_group + beta.reshape( 1, -1, 1, 1)
+    
+    cache = (mean, variance, x, x_group, gamma, beta, G, eps)
+    
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -974,8 +995,13 @@ def spatial_groupnorm_backward(dout, cache):
 
     Returns a tuple of:
     - dx: Gradient with respect to inputs, of shape (N, C, H, W)
-    - dgamma: Gradient with respect to scale parameter, of shape (C,)
-    - dbeta: Gradient with respect to shift parameter, of shape (C,)
+    - dgamma: Gradient with respect to scale parameter, of shape (1,C,1,1)
+    - dbeta: Gradient with respect to shift parameter, of shape (1,C,1,1)
+    
+    Note: The ipython notebook provided by CS 231n expect dgamma and dbeta to
+    be of the shape (1,C,1,1) which is why this function returns dgamma and 
+    dbeta in that shape. The original function docstring said that dgamma 
+    and dbeta are of the shape (C,)
     """
     dx, dgamma, dbeta = None, None, None
 
@@ -984,9 +1010,37 @@ def spatial_groupnorm_backward(dout, cache):
     # This will be extremely similar to the layer norm implementation.        #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
-
+    
+    mean, variance, x, x_group, beta, gamma, G, eps = cache
+    
+    # dgamma and dbeta as in batch norm
+    dgamma = np.sum( dout * x_group , axis=(0,2,3), keepdims=True )
+    dbeta = np.sum(dout, axis=(0,2,3), keepdims=True)
+    
+    N,C,H,W = np.shape(x)
+    
+    # we can now just follow the batch norm paper taking care to sum over the 
+    # right dimensions
+    dx_group = dout * gamma
+    dx_group = dx_group.reshape(N, G, C//G, H, W)
+    
+    x_input = x.reshape( N, G, C//G, H, W)
+    
+    x_minus_mean = x_input - mean
+    second_dim = (C//G) * H * W
+    
+    dvar = np.sum( dx_group * ( x_minus_mean ) * -0.5 * ( variance + eps )** (-3/2 ), 
+                  axis=(2,3,4), keepdims=True)
+    
+    dmean = np.sum ( dx_group * -1 / (np.sqrt( variance+eps ) ), 
+                    axis=(2,3,4),keepdims=True  ) + dvar * (np.sum ( -2 * x_minus_mean 
+                         , axis=(2,3,4), keepdims=True ) ) / second_dim 
+    
+    dx = dx_group * 1 / ( np.sqrt(variance + eps ) ) + dvar * 2 * (x_minus_mean) / \
+    second_dim + dmean * 1 / second_dim
+    
+    dx = dx.reshape(N, C, H, W)
+    
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
     #                             END OF YOUR CODE                            #
