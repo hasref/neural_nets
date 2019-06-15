@@ -962,6 +962,18 @@ def spatial_groupnorm_forward(x, gamma, beta, G, gn_param):
     # and layer normalization!                                                # 
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    
+    """
+    N, C, H, W = x.shape
+    data = x.reshape(N, G, C // G, H, W)
+    sample_mean = np.mean(data, axis=(2, 3, 4), keepdims=True)
+    sample_var = np.var(data, axis=(2, 3, 4), keepdims=True)
+    x_hat = (data - sample_mean) / (np.sqrt(sample_var + eps))
+    x_hat = x_hat.reshape(N, C, H, W)
+    out = gamma * x_hat + beta
+    cache = (x_hat, sample_mean, sample_var, eps, gamma, beta, x, G)
+    
+    """
     N, C , H , W = np.shape(x)
     
     # from group norm paper
@@ -971,12 +983,11 @@ def spatial_groupnorm_forward(x, gamma, beta, G, gn_param):
     
     x_group = ( x_group - mean ) / ( np.sqrt ( variance + eps ) ) 
     
-    x_group = np.reshape (x_group, (N, C, H, W) )
+    x_group = x_group.reshape(N,C,H,W)
     
     out = gamma.reshape( 1, -1, 1, 1) * x_group + beta.reshape( 1, -1, 1, 1)
     
     cache = (mean, variance, x, x_group, gamma, beta, G, eps)
-    
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -1009,35 +1020,33 @@ def spatial_groupnorm_backward(dout, cache):
     # TODO: Implement the backward pass for spatial group normalization.      #
     # This will be extremely similar to the layer norm implementation.        #
     ###########################################################################
-    # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****    
     
-    mean, variance, x, x_group, beta, gamma, G, eps = cache
+    #x_group, mean, variance, eps, gamma ,beta, x, G = cache
     
-    # dgamma and dbeta as in batch norm
-    dgamma = np.sum( dout * x_group , axis=(0,2,3), keepdims=True )
-    dbeta = np.sum(dout, axis=(0,2,3), keepdims=True)
-    
+    mean, variance, x, x_group, gamma, beta, G, eps = cache
+        
     N,C,H,W = np.shape(x)
+    second_dim = (C // G) * H * W
+    x = x.reshape(N, G, C//G, H, W)
     
-    # we can now just follow the batch norm paper taking care to sum over the 
-    # right dimensions
-    dx_group = dout * gamma
-    dx_group = dx_group.reshape(N, G, C//G, H, W)
+    dgamma = np.sum( dout * x_group , axis=(0,2,3) ).reshape(1,C,1,1)
+    dbeta = np.sum(dout, axis=(0,2,3), keepdims=True).reshape(1,C,1,1)    
+
+    # We can just follow the batchnorm paper now, taking care to sum over the 
+    # correct dimensions
+    dx_group = gamma * dout
+    dx_group = dx_group.reshape(N, G, C // G, H, W)
     
-    x_input = x.reshape( N, G, C//G, H, W)
+    dvar = -0.5 * np.sum ( dx_group * (x - mean ) * ( variance + 
+                   eps ) ** (-3/2), axis = (2,3,4), keepdims=True) 
     
-    x_minus_mean = x_input - mean
-    second_dim = (C//G) * H * W
+    dmean = -1 * np.sum( dx_group * 1 / (np.sqrt(variance + eps) ), 
+                        axis = (2,3,4), keepdims=True) + \
+    dvar * -2 * (np.sum ( (x - mean), axis = (2,3,4), keepdims=True ) / second_dim )
     
-    dvar = np.sum( dx_group * ( x_minus_mean ) * -0.5 * ( variance + eps )** (-3/2 ), 
-                  axis=(2,3,4), keepdims=True)
-    
-    dmean = np.sum ( dx_group * -1 / (np.sqrt( variance+eps ) ), 
-                    axis=(2,3,4),keepdims=True  ) + dvar * (np.sum ( -2 * x_minus_mean 
-                         , axis=(2,3,4), keepdims=True ) ) / second_dim 
-    
-    dx = dx_group * 1 / ( np.sqrt(variance + eps ) ) + dvar * 2 * (x_minus_mean) / \
-    second_dim + dmean * 1 / second_dim
+    dx = dx_group * ( 1 / (np.sqrt( variance + eps ) ) ) + dvar * 2 * \
+    (x - mean) / second_dim + dmean * 1 / second_dim 
     
     dx = dx.reshape(N, C, H, W)
     
@@ -1046,7 +1055,6 @@ def spatial_groupnorm_backward(dout, cache):
     #                             END OF YOUR CODE                            #
     ###########################################################################
     return dx, dgamma, dbeta
-
 
 def svm_loss(x, y):
     """
