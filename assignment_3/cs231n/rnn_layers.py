@@ -330,8 +330,24 @@ def lstm_step_forward(x, prev_h, prev_c, Wx, Wh, b):
     # You may want to use the numerically stable sigmoid implementation above.  #
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
+    N, H = prev_h.shape
+    
+    activations = x.dot(Wx) + prev_h.dot(Wh) + b
+    
+    sigmoid_activations = sigmoid( activations[:, :3*H] )
+    
+    input_gate =  sigmoid_activations [:, :H ] 
+    forget_gate = sigmoid_activations [:, H:2*H]     
+    output_gate = sigmoid_activations [:, 2*H : 3*H]
+    
+    # Justin calls this the "gate gate"
+    gate_gate = np.tanh ( activations[:, 3*H: ] )
+    
+    next_c = forget_gate * prev_c + input_gate * gate_gate
+    next_h = output_gate * np.tanh( next_c )
+    
+    cache = (x, prev_h, prev_c, next_c, next_h, input_gate, forget_gate,
+             output_gate, gate_gate, Wx, Wh, b)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -341,7 +357,7 @@ def lstm_step_forward(x, prev_h, prev_c, Wx, Wh, b):
     return next_h, next_c, cache
 
 
-def lstm_step_backward(dnext_h, dnext_c, cache):
+def lstm_step_backward(dnext_h, dnext_c, cache, **kwargs):
     """
     Backward pass for a single timestep of an LSTM.
 
@@ -366,8 +382,53 @@ def lstm_step_backward(dnext_h, dnext_c, cache):
     # the output value from the nonlinearity.                                   #
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    x, prev_h, prev_c, next_c, next_h, input_gate, forget_gate, \
+             output_gate, gate_gate, Wx, Wh, b = cache
 
-    pass
+    # backprop through hidden state equation
+    doutput_gate = np.tanh(next_c) * dnext_h
+    
+    # add kwargs to allow lstm_backward function to rely on our step function
+    kwargs.setdefault('time_step', 'regular')
+    
+    if ( kwargs['time_step'] == 'regular' ):
+        dnext_c_through_h = output_gate *  ( 1 - np.tanh(next_c) * np.tanh(next_c) )\
+        * dnext_h
+    else:
+        dnext_c_through_h = np.zeros( np.shape(dnext_c) )
+    
+    dnext_c += dnext_c_through_h             
+    
+    # back prop through cell state equation
+    dforget_gate = prev_c * dnext_c
+    dinput_gate = gate_gate * dnext_c
+    dgate_gate = input_gate * dnext_c
+    dprev_c = forget_gate * dnext_c
+    
+    # backprop through input, forget, output, and "gate" gates
+    # first three through sigmoid gate
+    dactiv_input = input_gate * (1 - input_gate) * dinput_gate
+    dactiv_forget = forget_gate * (1 - forget_gate) * dforget_gate
+    dactiv_output = output_gate * (1 - output_gate) * doutput_gate
+    
+    # through tanh gate
+    dactiv_gate = dgate_gate * ( 1 - gate_gate ** 2 )
+    
+    #print( dactiv_input.shape, dactiv_forget.shape, dactiv_output.shape, dactiv_gate.shape)
+    
+    dactiv = np.hstack ( (dactiv_input, dactiv_forget, dactiv_output, 
+                        dactiv_gate ) ) # N, 4H
+    
+    # backprop through activation affine layer
+    db = np.sum(dactiv, axis=0)
+    
+    dx = dactiv.dot( Wx.T )
+    dprev_h = dactiv.dot( Wh.T )
+    
+    dWx = (x.T).dot(dactiv)
+    dWh = (prev_h.T).dot(dactiv)
+    
+    
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -405,9 +466,44 @@ def lstm_forward(x, h0, Wx, Wh, b):
     # You should use the lstm_step_forward function that you just defined.      #
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    
+    _, T, D = x.shape
+    N,H = h0.shape
 
-    pass
+    # long term storage for backprop
+    hidden_states = np.zeros( (N, T+1, H) )
+    cell_states = np.zeros( (N, T+1, H) )
+    
+    input_gates = np.zeros( ( N, T, H ) )
+    output_gates = np.zeros( ( N, T, H ) )
+    forget_gates = np.zeros ( ( N, T, H ) )
+    gate_gates = np.zeros ( ( N, T, H ) )
 
+
+    hidden_states[:, 0, :] = h0
+    cell_states [:, 0, :] = np.zeros( ( N, H ) )
+        
+    for t in range (T): 
+        h , c , c_t = lstm_step_forward( x[:, t, :], 
+                        hidden_states[:, t, :], cell_states[:, t, :],
+                        Wx, Wh, b )
+        
+        _, _, _, _ , _ , i_gate, f_gate, o_gate, g_gate, _, _, _ = c_t
+
+        # storage is offset by one since the first (t = 0) entry is h0 and c0
+        hidden_states[:, t+1, :] = h
+        cell_states[:, t+1, :] = c
+        
+        input_gates[:, t, :] = i_gate
+        output_gates [:, t, : ] = o_gate
+        forget_gates [:, t, :] = f_gate
+        gate_gates [:, t, :] = g_gate
+        
+        
+    cache = (x, hidden_states, cell_states, input_gates, output_gates, 
+             forget_gates, gate_gates, Wx, Wh, b)
+    
+    h = hidden_states[:, 1:, :]
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
     #                               END OF YOUR CODE                             #
@@ -437,8 +533,50 @@ def lstm_backward(dh, cache):
     # You should use the lstm_step_backward function that you just defined.     #
     #############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
+    x, hidden_states, cell_states, input_gates, output_gates, \
+         forget_gates, gate_gates, Wx, Wh, b = cache
+         
+    N, T, H = dh.shape
+    _ , _, D = x.shape
+    
+    dx = np.zeros( x.shape )
+    db = np.zeros( b.shape )
+    dWh = np.zeros( Wh.shape )
+    dWx = np.zeros ( Wx.shape )
+    
+    # initial cell derivative comes from dh
+    final_cell_state = cell_states[:, T, :]
+    c = np.tanh(final_cell_state)
+    
+    dc_t = output_gates[:, T-1, :] *  ( 1 - c * c) * dh[ :, T-1 , : ]
+    dh_t = np.zeros( ( N,H ) )
+    
+    time = 'final'
+    for t in range(T-1, -1, -1):
+        # construct the cache for the time step t
+        cache_t = (x[:, t, :], hidden_states[:, t, :], cell_states[:, t, :], 
+               cell_states[:, t+1, :], hidden_states[:, t+1, :], 
+               input_gates[:, t,:], forget_gates[:,t,:], output_gates[:, t, :],
+               gate_gates[:,t,:], Wx, Wh, b)
+        
+        # dh only contains derivatives with respect to local loss function. 
+        # the upstream gradient for the hidden state must therefore be added 
+        # to it ---> dh[:,t,:] + dh_t
+        
+        dx_t, dh_t, dc_t, dWx_t, dWh_t, db_t =  lstm_step_backward( dh[:,t,:] + dh_t, 
+                                                                   dc_t, cache_t,
+                                                                   time_step=time)
+        
+        # accumulate gradients
+        dWx += dWx_t
+        dWh += dWh_t
+        db  += db_t
+        dx[:,t,:] = dx_t
+        # set time_step to regular for all other time steps
+        time = 'regular'
+    
+    # last dh_t is dh0
+    dh0 = dh_t
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################

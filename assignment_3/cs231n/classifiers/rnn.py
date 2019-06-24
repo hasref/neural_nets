@@ -145,6 +145,14 @@ class CaptioningRNN(object):
 
         # *** Forward pass *** 
         
+        # set forward and backward functions based on cell type
+        if (self.cell_type == 'rnn'):
+            forward_func = rnn_forward
+            backward_func = rnn_backward
+        elif (self.cell_type == 'lstm'):
+            forward_func = lstm_forward
+            backward_func = lstm_backward
+        
         # 1. Affine --> initial hidden state
         h0, initial_cache = affine_forward (features, W_proj, b_proj )
         
@@ -152,8 +160,9 @@ class CaptioningRNN(object):
         embedded_captions, embed_cache = word_embedding_forward( captions_in, 
                                                                 W_embed )
         
-        # 3. RNN forward pass
-        hidden_states, rnn_cache = rnn_forward(embedded_captions, h0, Wx, Wh, b )
+        # 3. RNN Forward Pass
+        hidden_states, rnn_cache = forward_func (embedded_captions,
+                                                   h0, Wx, Wh, b )
         
         # 4. Temporal Affine 
         vocab_out, vocab_cache = temporal_affine_forward ( hidden_states, 
@@ -163,19 +172,18 @@ class CaptioningRNN(object):
         
         # *** Backward Pass *** 
         
-        #4
+        # 4
         dh, grads['W_vocab'], grads['b_vocab'] = temporal_affine_backward (dx, 
                  vocab_cache )
         
-        #3
-        dword, dh0, grads['Wx'], grads['Wh'], grads['b'] = rnn_backward(dh , 
-                        rnn_cache )
-        
-        
-        #2 
+        # 3
+        dword, dh0, grads['Wx'], grads['Wh'], grads['b'] = backward_func (dh , 
+                    rnn_cache )
+    
+        # 2 
         grads['W_embed'] = word_embedding_backward(dword, embed_cache )
         
-        #1 
+        # 1 
         dfeatures, grads['W_proj'], grads['b_proj'] = affine_backward ( dh0, 
                  initial_cache )        
         
@@ -251,22 +259,49 @@ class CaptioningRNN(object):
         hidden_state, _ = affine_forward( features, W_proj, b_proj )
         sampled_words = np.repeat (self._start, N)
         
+        
         # We do not stop after the end token is generated. 
-        for t in range(max_length):
-            # 1. Embed last word 
-            embedded_word, _ = word_embedding_forward( sampled_words, W_embed  )
-
-            # 2. RNN step
-            hidden_state, _ = rnn_step_forward(embedded_word, hidden_state, Wx, Wh, b)
-
-            # 3. Get Scores
-            scores, _ = affine_forward(hidden_state, W_vocab, b_vocab )
-
-            #4. find next word for each example in the minibatch
-            sampled_words = np.argmax(scores, axis=1)
-
-            #             
-            captions[:, t] = sampled_words
+        
+        if (self.cell_type == 'rnn'):
+            for t in range(max_length):
+                # 1. Embed last word 
+                embedded_word, _ = word_embedding_forward( sampled_words, W_embed  )
+    
+                # 2. RNN step
+                hidden_state, _ = rnn_step_forward (embedded_word, hidden_state, Wx, Wh, b)
+    
+                # 3. Get Scores
+                scores, _ = affine_forward(hidden_state, W_vocab, b_vocab )
+    
+                #4. find next word for each example in the minibatch
+                sampled_words = np.argmax(scores, axis=1)
+    
+                #             
+                captions[:, t] = sampled_words
+            
+        elif (self.cell_type == 'lstm'):
+            
+            H,_ = Wh.shape
+            cell_state = np.zeros((N,H))
+            for t in range(max_length):
+                # 1. Embed last word 
+                embedded_word, _ = word_embedding_forward( sampled_words, W_embed  )
+    
+                # 2. LSTM step
+                hidden_state, cell_state, _ = lstm_step_forward (embedded_word, hidden_state,
+                                                     cell_state,
+                                                     Wx, Wh, b)
+    
+                # 3. Get Scores
+                scores, _ = affine_forward(hidden_state, W_vocab, b_vocab )
+    
+                #4. find next word for each example in the minibatch
+                sampled_words = np.argmax(scores, axis=1)
+    
+                #             
+                captions[:, t] = sampled_words
+    
+            
             
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
