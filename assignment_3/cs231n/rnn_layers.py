@@ -35,9 +35,8 @@ def rnn_step_forward(x, prev_h, Wx, Wh, b):
     # and cache variables respectively.                                          #
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
-
+    next_h = np.tanh( x.dot(Wx) + prev_h.dot(Wh) + b )
+    cache = (x, prev_h, Wx, Wh, b, next_h )
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
     #                               END OF YOUR CODE                             #
@@ -68,8 +67,18 @@ def rnn_step_backward(dnext_h, cache):
     # of the output value from tanh.                                             #
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
+    x, prev_h, Wx, Wh, b, next_h = cache
+    
+    #backpropr throuogh tanh dtanh = 1 - tanh**2
+    dtanh = 1 - next_h * next_h
+    dtanh = dnext_h * dtanh
+    
+    db = np.sum(dtanh, axis=0)
+    dWx = np.dot( x.T, dtanh )
+    dWh = np.dot ( prev_h.T, dtanh )
+    
+    dx = dtanh.dot( Wx.T )
+    dprev_h = dtanh.dot ( Wh.T )
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -103,9 +112,16 @@ def rnn_forward(x, h0, Wx, Wh, b):
     # above. You can use a for loop to help compute the forward pass.            #
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
-
+    N,T,D = x.shape
+    _, H = Wh.shape
+    
+    h = np.zeros( (N, T, H ) )
+    prev_h = h0  
+    for t in range(T):
+        h[:, t, :], _ = rnn_step_forward( x[:, t, :], prev_h, Wx, Wh, b)
+        prev_h = h[:, t, :]
+        
+    cache = x, h0, h, Wx, Wh, b
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
     #                               END OF YOUR CODE                             #
@@ -139,9 +155,54 @@ def rnn_backward(dh, cache):
     # defined above. You can use a for loop to help compute the backward pass.   #
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
-
+    x, h0, h, Wx, Wh, b = cache
+    
+    N,T,H = x.shape
+    D,_ = Wx.shape
+    
+    dx = np.zeros(np.shape(x) )
+    dh0 = np.zeros(np.shape(h0) )
+    dWx = np.zeros(np.shape(Wx) )
+    dWh = np.zeros(np.shape(Wh) )
+    db = np.zeros(np.shape(b) )
+    dprev_h = np.zeros( np.shape(h0) )
+    
+    # do last step outside
+    for t in range(T-1, 0 ,-1):
+        # dh only contains gradient of h with respect to local loss
+        # add value of gradient flowing from upstream --> how does the 
+        # the hidden state output at this step, affect the loss at future time 
+        # steps
+        dnext_h = dh[:, t, :] + dprev_h
+        
+        dback = rnn_step_backward( dnext_h, ( x[:, t, :], h[:, t-1, :], Wx, Wh, 
+                                     b, h[:,t,:] ) )
+        
+        dx_t, dprev_h, dWx_t, dWh_t, db_t = dback
+        
+        dx[:, t, :] = dx_t
+        
+        # parameter sharing --> gradients add
+        dWx += dWx_t
+        dWh += dWh_t
+        db += db_t
+    
+    
+    # last iteration
+    dnext_h = dh[:, 0 , :] + dprev_h
+    dback = rnn_step_backward( dnext_h, ( x[:, 0, :], h0 , Wx, Wh, 
+                                 b, h[:, 0 ,:] ) )
+    
+    dx_t, dprev_h, dWx_t, dWh_t, db_t = dback
+    
+    dx[:, 0, :] = dx_t
+    dWx += dWx_t
+    dWh += dWh_t
+    db += db_t
+    
+    # dh0 is the gradient of the total loss with respect to the initial hidden
+    # state
+    dh0 = dprev_h
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
     #                               END OF YOUR CODE                             #
@@ -172,7 +233,8 @@ def word_embedding_forward(x, W):
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    out = W[x,:]
+    cache = (x,W)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
@@ -204,8 +266,20 @@ def word_embedding_backward(dout, cache):
     # HINT: Look up the function np.add.at                                       #
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
+    x,W = cache
+    
+    V, _ = W.shape
+    N,T,D = dout.shape
+    
+    dW = np.zeros( (V, D) )
+    
+    # for each "idx" in x, we want to accumulate the derivatives in dout at 
+    # dW[ idx, : ] since this would then give us the gradient for each word 
+    # embedding vector
+    
+    for row in range(N):
+        for column in range(T):
+            dW[ x[row, column], : ] += dout[ row, column, : ]
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################

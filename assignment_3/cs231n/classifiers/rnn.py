@@ -142,7 +142,43 @@ class CaptioningRNN(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+
+        # *** Forward pass *** 
+        
+        # 1. Affine --> initial hidden state
+        h0, initial_cache = affine_forward (features, W_proj, b_proj )
+        
+        # 2. Word embedding: 
+        embedded_captions, embed_cache = word_embedding_forward( captions_in, 
+                                                                W_embed )
+        
+        # 3. RNN forward pass
+        hidden_states, rnn_cache = rnn_forward(embedded_captions, h0, Wx, Wh, b )
+        
+        # 4. Temporal Affine 
+        vocab_out, vocab_cache = temporal_affine_forward ( hidden_states, 
+                                                          W_vocab, b_vocab )
+        # 5. Temporal Softmax Loss
+        loss, dx = temporal_softmax_loss( vocab_out, captions_out, mask )
+        
+        # *** Backward Pass *** 
+        
+        #4
+        dh, grads['W_vocab'], grads['b_vocab'] = temporal_affine_backward (dx, 
+                 vocab_cache )
+        
+        #3
+        dword, dh0, grads['Wx'], grads['Wh'], grads['b'] = rnn_backward(dh , 
+                        rnn_cache )
+        
+        
+        #2 
+        grads['W_embed'] = word_embedding_backward(dword, embed_cache )
+        
+        #1 
+        dfeatures, grads['W_proj'], grads['b_proj'] = affine_backward ( dh0, 
+                 initial_cache )        
+        
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -210,8 +246,28 @@ class CaptioningRNN(object):
         # you are using an LSTM, initialize the first cell state to zeros.        #
         ###########################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        
+        # affine transformation of image features
+        hidden_state, _ = affine_forward( features, W_proj, b_proj )
+        sampled_words = np.repeat (self._start, N)
+        
+        # We do not stop after the end token is generated. 
+        for t in range(max_length):
+            # 1. Embed last word 
+            embedded_word, _ = word_embedding_forward( sampled_words, W_embed  )
 
-        pass
+            # 2. RNN step
+            hidden_state, _ = rnn_step_forward(embedded_word, hidden_state, Wx, Wh, b)
+
+            # 3. Get Scores
+            scores, _ = affine_forward(hidden_state, W_vocab, b_vocab )
+
+            #4. find next word for each example in the minibatch
+            sampled_words = np.argmax(scores, axis=1)
+
+            #             
+            captions[:, t] = sampled_words
+            
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
