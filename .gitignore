@@ -1,5 +1,4 @@
+
 # ignore compiled py bytecode
 *.pyc
 */.ipynb_checkpoints
-#venv
-nns/
